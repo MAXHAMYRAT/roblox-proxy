@@ -3,12 +3,11 @@ const fetch = require("node-fetch");
 
 const app = express();
 
-// Проверка что сервер работает
 app.get("/", (req, res) => {
     res.send("Proxy is working");
 });
 
-// Геймпасы пользователя
+// 🔍 GAMEPASSES + INVENTORY TRY
 app.get("/gamepasses", async (req, res) => {
     try {
         const userId = req.query.userId;
@@ -17,32 +16,67 @@ app.get("/gamepasses", async (req, res) => {
             return res.status(400).json({ error: "userId missing" });
         }
 
-        const gamesRes = await fetch(`https://games.roblox.com/v2/users/${userId}/games?limit=50`);
+        let result = {
+            createdGamepasses: [],
+            inventoryGamepasses: [],
+        };
+
+        // 1️⃣ Получаем игры пользователя
+        const gamesRes = await fetch(
+            `https://games.roblox.com/v2/users/${userId}/games?limit=50`
+        );
         const gamesData = await gamesRes.json();
 
-        let allPasses = [];
-
-        if (gamesData.data && gamesData.data.length > 0) {
+        if (gamesData.data) {
             for (const game of gamesData.data) {
-                const passesRes = await fetch(
-                    `https://games.roblox.com/v1/games/${game.id}/game-passes?limit=100`
-                );
+                try {
+                    const passesRes = await fetch(
+                        `https://games.roblox.com/v1/games/${game.id}/game-passes?limit=100`
+                    );
+                    const passesData = await passesRes.json();
 
-                const passesData = await passesRes.json();
-
-                if (passesData.gamePasses) {
-                    allPasses = allPasses.concat(passesData.gamePasses);
-                }
+                    if (passesData.gamePasses) {
+                        result.createdGamepasses.push(...passesData.gamePasses);
+                    }
+                } catch (e) {}
             }
         }
 
-        res.json(allPasses);
+        // 2️⃣ ПЫТАЕМСЯ inventory (может быть пусто без авторизации)
+        try {
+            const invRes = await fetch(
+                `https://inventory.roblox.com/v2/users/${userId}/assets/collectibles?limit=100`
+            );
+            const invData = await invRes.json();
+
+            if (invData.data) {
+                result.inventoryGamepasses = invData.data.filter(
+                    item => item.assetType === "GamePass"
+                );
+            }
+        } catch (e) {}
+
+        // 3️⃣ если вообще пусто — объясняем
+        if (
+            result.createdGamepasses.length === 0 &&
+            result.inventoryGamepasses.length === 0
+        ) {
+            return res.json({
+                warning:
+                    "Roblox не отдаёт gamepasses этого пользователя через публичный API",
+                result,
+            });
+        }
+
+        res.json(result);
     } catch (e) {
-        res.status(500).json({ error: "fail" });
+        res.status(500).json({
+            error: "fail",
+            details: e.message,
+        });
     }
 });
 
-// Render порт (ОБЯЗАТЕЛЬНО)
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
