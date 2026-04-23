@@ -3,12 +3,12 @@ const fetch = require("node-fetch");
 
 const app = express();
 
-// Главный тест (проверка что сервер жив)
+// Проверка что сервер работает
 app.get("/", (req, res) => {
     res.send("Proxy is working");
 });
 
-// Геймпасы по userId
+// Геймпасы пользователя
 app.get("/gamepasses", async (req, res) => {
     try {
         const userId = req.query.userId;
@@ -22,15 +22,16 @@ app.get("/gamepasses", async (req, res) => {
 
         let allPasses = [];
 
-        if (gamesData.data) {
+        if (gamesData.data && gamesData.data.length > 0) {
             for (const game of gamesData.data) {
                 const passesRes = await fetch(
                     `https://games.roblox.com/v1/games/${game.id}/game-passes?limit=100`
                 );
+
                 const passesData = await passesRes.json();
 
-                if (passesData.data) {
-                    allPasses = allPasses.concat(passesData.data);
+                if (passesData.gamePasses) {
+                    allPasses = allPasses.concat(passesData.gamePasses);
                 }
             }
         }
@@ -41,7 +42,7 @@ app.get("/gamepasses", async (req, res) => {
     }
 });
 
-// Render порт (ОЧЕНЬ ВАЖНО)
+// Render порт (ОБЯЗАТЕЛЬНО)
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
